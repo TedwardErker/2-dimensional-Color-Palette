@@ -1,0 +1,397 @@
+#+PROPERTY:  header-args:R :cache no :results output :exports both :comments link :session *R* :eval yes
+* 2-dimensional color palette
+#+BEGIN_SRC sh
+wget -O data/gdd.txt https://www1.ncdc.noaa.gov/pub/data/normals/1981-2010/supplemental/products/agricultural/ann-grdd-tb4886.txt
+wget -O data/precip.txt https://www1.ncdc.noaa.gov/pub/data/normals/1981-2010/products/precipitation/ann-prcp-normal.txt
+wget -O data/temp-station-info.txt https://www1.ncdc.noaa.gov/pub/data/normals/1981-2010/station-inventories/temp-inventory.txt
+#+END_SRC
+
+#+RESULTS:
+
+#+begin_src R
+    library(ggplot2)
+  library(ggthemes)
+    library(plyr)
+    library(dplyr)
+    library(tidyr)
+    library(stringr)
+
+        ttheme <-  theme_solarized(base_size = 18) +
+          theme(rect = element_rect(fill = "transparent"),
+                panel.background = element_rect(fill = "transparent"),
+                panel.grid.major = element_line(colour = "#839496", size = .2),
+                panel.grid.minor = element_line(colour = "#839496", size = .1),
+                axis.text = element_text(colour = "#839496"))
+
+blue <- "#268bd2"
+magenta <- "#d33682"
+
+    d <- read.table("data/gdd.txt")
+
+    colnames(d) <- c("station", "grdd")
+
+    d <- d %>%
+        mutate(gdd = as.numeric(str_match(grdd, "-*[0-9]+")[,1]),
+               qual = str_match(grdd, "[A-Z]")[,1])
+    head(d)
+    dim(d)
+
+    d <- d %>%
+        filter(qual %in% c("C","S","R"),
+               gdd >= 0)
+    dim(d)
+
+    ll <- read.table("data/temp-station-info.txt", fill = T, stringsAsFactors = F)
+    ll <- ll[,1:3] # get station, lat, and long
+    colnames(ll) <- c("station","lat","long")
+
+    ll <-  ll %>%
+        mutate(station = as.character(station),
+               lat = as.numeric(lat))
+
+    dl <- left_join(d, ll)
+
+    write.csv(dl, "data/gdd_qt_ll.csv")
+
+
+  p <- read.table("data/precip.txt")
+  colnames(p) <- c("station", "precip_qual")
+
+    p <- p %>%
+        mutate(precip = as.numeric(str_match(precip_qual, "[0-9]+")[,1]),
+               qual = str_match(precip_qual, "[A-Z]")[,1])
+    head(p)
+    dim(p)
+
+    p <- p %>%
+        filter(qual %in% c("C","S","R"),
+               precip >= 0)
+    dim(p)
+
+
+    pl <- left_join(p, ll)
+
+    write.csv(pl, "data/gdd_qt_ll.csv")
+#+end_src
+
+#+RESULTS:
+#+begin_example
+
+Attaching package: ‘dplyr’
+
+The following objects are masked from ‘package:plyr’:
+
+    arrange, count, desc, failwith, id, mutate, rename, summarise,
+    summarize
+
+The following objects are masked from ‘package:stats’:
+
+    filter, lag
+
+The following objects are masked from ‘package:base’:
+
+    intersect, setdiff, setequal, union
+      station   grdd   gdd qual
+1 AQW00061705 12073C 12073    C
+2 CAW00064757  2636Q  2636    Q
+3 CQC00914080 11168P 11168    P
+4 CQC00914801 11656R 11656    R
+5 FMC00914395 11423P 11423    P
+6 FMC00914419 11860P 11860    P
+[1] 7501    4
+[1] 6340    4
+Warning message:
+In evalq(as.numeric(lat), <environment>) : NAs introduced by coercion
+Joining, by = "station"
+Warning message:
+Column `station` joining factor and character vector, coercing into character vector
+      station precip_qual precip qual
+1 AQC00914000      21392R  21392    R
+2 AQW00061705      12263C  12263    C
+3 CAW00064757       3172Q   3172    Q
+4 CQC00914080       8339P   8339    P
+5 CQC00914801       9124R   9124    R
+6 CQC00914855       6976P   6976    P
+[1] 9307    4
+[1] 7440    4
+Joining, by = "station"
+Warning message:
+Column `station` joining factor and character vector, coercing into character vector
+#+end_example
+
+#+begin_src R :exports results :results graphics :file figs/precip_cont.png :bg transparent :width 600
+    ggplot(dplyr::filter(pl, lat < 50, lat > 25, long < 0), aes(x = long, y = lat, color = precip)) +
+        geom_point() +
+      coord_map(projection = "albers", parameters = c(29,45)) +
+      scale_color_continuous(name = "Precip",high = blue) +
+      ttheme +
+      theme(legend.position = c(.9,.23),
+            text = element_text(size = 18),
+            legend.direction = "vertical") +
+      labs(x = "longitude", y = "latitude")
+#+end_src
+
+#+RESULTS:
+[[file:figs/precip_cont.png]]
+#+begin_src R :exports results :results graphics :file figs/gdd_cont.png :bg transparent :width 600
+    ggplot(dplyr::filter(dl, lat < 50, lat > 25, long < 0), aes(x = long, y = lat, color = gdd)) +
+        geom_point() +
+      coord_map(projection = "albers", parameters = c(29,45)) +
+      scale_color_continuous(name = "GDD",high = magenta) +
+      ttheme +
+      theme(legend.position = c(.9,.23),
+            text = element_text(size = 18),
+            legend.direction = "vertical") +
+      labs(x = "longitude", y = "latitude")
+#+end_src
+
+#+RESULTS:
+[[file:figs/gdd_cont.png]]
+weather stations across the US
+
+#+begin_src R :exports results :results graphics :file figs/hue_pal_simplest.png :bg transparent
+    library(reshape2)
+    blue <- "#268bd2"
+    green <- "#859900"
+    orange <- "#cb4b16"
+    magenta <- "#d33682"
+
+    x1 <- colorRampPalette(c("black", magenta), space = "rgb", interpolate = "spline")(50)
+    x2 <- colorRampPalette(c(blue, green), space = "rgb", interpolate = "spline")(50)
+
+    cols <- sapply(1:length(x1), function(i) {colorRampPalette(c(x1[i], x2[i]), space = "rgb",interpolate = "spline")(50) })
+
+    colspace <- expand.grid(precip_col = seq(300,6700, length.out = 50), gdd_col = seq(2000,9000, length.out = 50))
+
+    m <- melt(cols) %>%
+        mutate(value = as.character(value))
+
+    cols <- cbind(colspace, m)
+
+    cols_p <- rename(cols, gdd = gdd_col, precip = precip_col)
+
+  pal_key <-  ggplot(data = cols_p, aes(x = gdd/1000, y = precip/100)) +
+        geom_raster(aes(fill = value)) +
+        scale_fill_identity() +
+        scale_x_continuous("GDD (th)") +
+        scale_y_continuous("Precip (in)") +
+        ttheme
+
+
+  pal_key
+#+end_src
+
+#+RESULTS:
+[[file:figs/hue_pal_simplest.png]]
+
+#+begin_src R
+d <- left_join(dl, pl, by = c("station", "lat", "long"))
+
+  dn <- d %>%
+      filter(complete.cases(.)) %>%
+      filter( lat < 50, lat > 25, long < 0)
+
+  m <- as.matrix(dplyr::select(dn, gdd, precip))
+  cm <- as.matrix(dplyr::select(cols, gdd_col, precip_col))
+
+  whichmin <- apply(m, 1, function(mm) {
+      cm[which.min(colSums((t(cm) - mm)^2)),]
+  })
+
+  precip_gdd_closest <- t(whichmin) %>%
+      data.frame()
+
+  precip_gdd_closest_value <- left_join(precip_gdd_closest, cols) %>%
+      rename(gdd = gdd_col, precip = precip_col) %>%
+      dplyr::select(value)
+
+  ddn <- cbind(dn, precip_gdd_closest_value)
+
+#+end_src
+
+#+RESULTS:
+: Joining, by = c("gdd_col", "precip_col")
+
+
+#+begin_src R :exports results :results graphics :file figs/gdd_precip_cont_simple.png :width 600 :height 400 :bg transparent
+
+mp <-     ggplot(dplyr::filter(ddn, lat < 50, lat > 25, long < 0), aes(x = long, y = lat, color = value)) +
+        geom_point(alpha = 1, size = 1) +
+      coord_map(projection = "albers", parameters = c(29,45)) +
+      scale_color_identity() +
+      theme_bw() +
+      theme(legend.position = c(.9,.23),
+            text = element_text(size = 18),
+            legend.direction = "vertical") +
+      labs(x = "longitude", y = "latitude") +
+ttheme
+
+mp
+#+end_src
+
+#+RESULTS:
+[[file:figs/gdd_precip_cont_simple.png]]
+
+#+begin_src R
+  library(grid)
+  vp1 <- viewport(width = 0.2, height = 0.3, x = 0.88, y = 0.35)
+
+  #Just draw the plot twice
+  png("figs/Precip_GDD_map_wPalKey.png", width = 600, bg = "transparent", height = 400)
+  print(mp)
+  print(pal_key, vp = vp1)
+  dev.off()
+
+#+end_src
+
+#+RESULTS:
+: null device
+:           1
+
+[[file:figs/Precip_GDD_map_wPalKey.png]]
+
+
+
+#+begin_src R :exports results :results graphics :file figs/hue_pal_complex.png
+library(reshape2)
+red <- "#dc322f"
+  yellow <- "#b58900"
+  blue <- "#268bd2"
+  green <- "#859900"
+  cyan <- "#2aa198"
+  orange <- "#cb4b16"
+ violet <- "#6c71c4"
+ magenta <- "#d33682"
+
+         x1 <- colorRampPalette(c(orange,orange, red, magenta, magenta), space = "rgb", interpolate = "spline")(50)
+         x2 <- colorRampPalette(c(orange,  magenta), space = "rgb", interpolate = "spline")(50)
+         x3 <- colorRampPalette(c(blue,  yellow), space = "rgb", interpolate = "spline")(50)
+         x4 <- colorRampPalette(c(blue, green), space = "rgb", interpolate = "spline")(50)
+         x5 <- colorRampPalette(c(violet, violet, cyan, green, green), space = "rgb", interpolate = "spline")(50)
+
+         cols <- sapply(1:length(x1), function(i) {colorRampPalette(c(x1[i], x2[i], x3[i], x4[i], x5[i]), space = "rgb",interpolate = "spline")(50) })
+
+         colspace <- expand.grid(precip_col = seq(300,6700, length.out = 50), gdd_col = seq(2000,9000, length.out = 50))
+
+         m <- melt(cols) %>%
+             mutate(value = as.character(value))
+
+         cols <- cbind(colspace, m)
+
+       cols_p <- rename(cols, gdd = gdd_col, precip = precip_col)
+
+  pal_key <-  ggplot(data = cols_p, aes(x = gdd/1000, y = precip/100)) +
+        geom_raster(aes(fill = value)) +
+        scale_fill_identity() +
+        scale_x_continuous("GDD (th)") +
+        scale_y_continuous("Precip (in)") +
+        ttheme
+
+
+  pal_key
+
+#+end_src
+
+#+RESULTS:
+[[file:figs/hue_pal_complex.png]]
+
+#+begin_src R
+d <- left_join(dl, pl, by = c("station", "lat", "long"))
+
+  dn <- d %>%
+      filter(complete.cases(.)) %>%
+      filter( lat < 50, lat > 25, long < 0)
+
+  m <- as.matrix(dplyr::select(dn, gdd, precip))
+  cm <- as.matrix(dplyr::select(cols, gdd_col, precip_col))
+
+  whichmin <- apply(m, 1, function(mm) {
+      cm[which.min(colSums((t(cm) - mm)^2)),]
+  })
+
+  precip_gdd_closest <- t(whichmin) %>%
+      data.frame()
+
+  precip_gdd_closest_value <- left_join(precip_gdd_closest, cols) %>%
+      rename(gdd = gdd_col, precip = precip_col) %>%
+      dplyr::select(value)
+
+  ddn <- cbind(dn, precip_gdd_closest_value)
+
+#+end_src
+
+#+RESULTS:
+: Joining, by = c("gdd_col", "precip_col")
+
+#+begin_src R :exports results :results graphics :file figs/gdd_precip_cont_complex.png :width 600 :height 400 :bg transparent
+
+mp <-     ggplot(dplyr::filter(ddn, lat < 50, lat > 25, long < 0), aes(x = long, y = lat, color = value)) +
+        geom_point(alpha = 1, size = 1) +
+      coord_map(projection = "albers", parameters = c(29,45)) +
+      scale_color_identity() +
+      theme_bw() +
+      theme(legend.position = c(.9,.23),
+            text = element_text(size = 18),
+            legend.direction = "vertical") +
+      labs(x = "longitude", y = "latitude") +
+ttheme
+
+mp
+#+end_src
+
+#+RESULTS:
+[[file:figs/gdd_precip_cont_complex.png]]
+
+#+begin_src R
+  library(grid)
+  vp1 <- viewport(width = 0.2, height = 0.3, x = 0.88, y = 0.35)
+
+  #Just draw the plot twice
+  png("figs/Precip_GDD_map_wPalKey_complex.png", width = 600, bg = "transparent", height = 400)
+  print(mp)
+  print(pal_key, vp = vp1)
+  dev.off()
+
+#+end_src
+
+#+RESULTS:
+: null device
+:           1
+
+[[file:figs/Precip_GDD_map_wPalKey_complex.png]]
+
+#+begin_src R :exports results :results graphics :file figs/gdd_precip_points_colored.png :bg transparent
+  p <-       ggplot(data = ddn, aes(x = gdd, y = precip / 100, color = value)) +
+          scale_color_identity() +
+          geom_point(alpha = .9, size = .8)+
+            theme_solarized(light = F, base_size = 18) +
+      scale_y_continuous(name = "Precipitation (in)") +
+      scale_x_continuous(name = "Growing Degree Days") +
+      theme(axis.text = element_text(size = 18, color = "#839496"),
+            rect = element_rect(fill = "transparent"),
+            panel.background = element_rect(fill = "transparent"),
+            panel.grid = element_blank())
+p
+#+end_src
+
+#+RESULTS:
+[[file:figs/gdd_precip_points_colored.png]]
+
+#+begin_src R
+  library(grid)
+  vp1 <- viewport(width = 0.6, height = 0.5, x = 0.69, y = 0.83)
+
+  #Just draw the plot twice
+  png("figs/climate_space_wMap.png", bg = "transparent")
+  print(p)
+  print(mp, vp = vp1)
+  dev.off()
+
+#+end_src
+
+#+RESULTS:
+: null device
+:           1
+
+[[file:figs/climate_space_wMap.png]]
+
