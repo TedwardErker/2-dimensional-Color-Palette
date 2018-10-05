@@ -1,0 +1,6 @@
+.Rhistory
+figs/*thumb*
+.DS*
+data
+*.html
+*archive
